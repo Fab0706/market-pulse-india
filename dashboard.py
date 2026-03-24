@@ -1,9 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import anthropic
-import os
-
 
 @st.cache_data(ttl=3600)
 def load_data():
@@ -113,7 +110,7 @@ with st.sidebar:
         "Go to",
         ["🏠 Home", "🇮🇳 Indian Markets", "🇺🇸 US Markets",
          "💱 Forex", "🔗 Cross Market", "🦄 Unicorns",
-         "📰 News Feed", "💥 Market Crashes","🤖 Market Chatbot","ℹ️ About"],
+         "📰 News Feed", "💥 Market Crashes", "ℹ️ About"],
         label_visibility="collapsed"
     )
     st.markdown("---")
@@ -675,178 +672,6 @@ elif page == "💥 Market Crashes":
             </p>
         </div>
         """, unsafe_allow_html=True)
-
-
-elif page == "🤖 Market Chatbot":
-    st.markdown("## Market Chatbot")
-    st.markdown("Ask anything about the current market data shown in this dashboard.")
-
-    if beginner:
-        st.info("This AI analyst has read all your live market data. Ask it anything in plain English!")
-
-    # ── BUILD MARKET CONTEXT FROM LIVE DATA ──
-    latest = market.dropna().iloc[-1]
-    prev = market.dropna().iloc[-2]
-
-    nifty_val = latest["Nifty50"]
-    sp500_val = latest["SP500"]
-    usdinr_val = latest["USDINR"]
-    us_bond_val = latest["US_Bond_Yield"]
-    india_bond_val = latest["India_Bond_Yield"]
-    volatility = latest["Nifty50_Volatility"]
-    nifty_ma50 = latest["Nifty50_MA50"]
-    nifty_ma200 = latest["Nifty50_MA200"]
-
-    nifty_change = nifty_val - prev["Nifty50"]
-    sp500_change = sp500_val - prev["SP500"]
-
-    if volatility < 300:
-        mood = "CALM"
-    elif volatility < 600:
-        mood = "CAUTIOUS"
-    else:
-        mood = "PANIC"
-
-    # This is the "briefing" we send to Claude before the user's question
-    market_context = f"""
-    You are a financial analyst assistant for Market Pulse India dashboard.
-    Here is the LIVE market data as of today:
-
-    INDIAN MARKETS:
-    - Nifty 50: {nifty_val:,.0f} (changed {nifty_change:+.0f} from yesterday)
-    - Nifty 50-day moving average: {nifty_ma50:,.0f}
-    - Nifty 200-day moving average: {nifty_ma200:,.0f}
-    - Nifty is {"BELOW" if nifty_val < nifty_ma200 else "ABOVE"} its 200-day average — {"bearish" if nifty_val < nifty_ma200 else "bullish"} signal
-    - Market Volatility: {volatility:.0f} — Market Mood: {mood}
-
-    US MARKETS:
-    - S&P 500: {sp500_val:,.0f} (changed {sp500_change:+.0f} from yesterday)
-
-    FOREX:
-    - USD/INR: {usdinr_val:.2f} rupees per dollar
-
-    DEBT MARKETS:
-    - US 10Y Bond Yield: {us_bond_val:.2f}%
-    - India 10Y Bond Yield: {india_bond_val:.2f}%
-
-    KEY RESEARCH FINDINGS:
-    - Nifty 50 and S&P 500 have 0.72 correlation — they move together strongly
-    - USD/INR has weakened ~8.5% in the past year (from 86 to 93)
-    - US bond yields rising is pulling global money away from stocks
-    - When US market falls, India usually falls more — FII outflows
-
-    INSTRUCTIONS:
-    - Answer clearly in 3-5 sentences
-    - Use plain English unless the user asks for technical terms
-    - Reference the actual numbers above in your answer
-    - Do NOT give investment advice or buy/sell recommendations
-    - End with: "This is educational analysis only — not financial advice."
-    """
-
-    # ── CHAT INTERFACE ──
-
-    # Initialize chat history in session state
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-
-    # Show previous messages
-    for message in st.session_state.chat_history:
-        if message["role"] == "user":
-            st.markdown(f"""
-            <div style="background:#1a1a2e; border-left:3px solid #4a90d9;
-                        padding:12px; border-radius:8px; margin:8px 0;">
-                <b style="color:#4a90d9;">You:</b>
-                <p style="color:#ccc; margin:5px 0 0 0;">{message["content"]}</p>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div style="background:#0d1a0d; border-left:3px solid #00cc44;
-                        padding:12px; border-radius:8px; margin:8px 0;">
-                <b style="color:#00cc44;">Market Analyst:</b>
-                <p style="color:#ccc; margin:5px 0 0 0;">{message["content"]}</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-    # Suggested questions for beginners
-    if beginner and len(st.session_state.chat_history) == 0:
-        st.markdown("**Try asking:**")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Why is Nifty falling?"):
-                st.session_state.pending_question = "Why is Nifty falling right now?"
-            if st.button("Is the rupee strong or weak?"):
-                st.session_state.pending_question = "Is the rupee strong or weak right now and what does it mean?"
-        with col2:
-            if st.button("Should I be worried about markets?"):
-                st.session_state.pending_question = "Should I be worried about the markets right now?"
-            if st.button("What is the market mood telling us?"):
-                st.session_state.pending_question = "What is the current market mood telling us?"
-
-    # Text input
-    user_question = st.chat_input("Ask about the markets...")
-
-    # Check for suggested question
-    if "pending_question" in st.session_state:
-        user_question = st.session_state.pending_question
-        del st.session_state.pending_question
-
-    # Process the question
-    if user_question:
-        # Add user message to history
-        st.session_state.chat_history.append({
-            "role": "user",
-            "content": user_question
-        })
-
-        # Call Claude API
-        with st.spinner("Analysing market data..."):
-            try:
-                client = anthropic.Anthropic(
-                    api_key=os.getenv("ANTHROPIC_API_KEY")
-                )
-
-                response = client.messages.create(
-                    model="claude-opus-4-5",
-                    max_tokens=400,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": f"{market_context}\n\nUser question: {user_question}"
-                        }
-                    ]
-                )
-
-                bot_reply = response.content[0].text
-
-                # Add bot reply to history
-                st.session_state.chat_history.append({
-                    "role": "assistant",
-                    "content": bot_reply
-                })
-
-                st.rerun()
-
-            except Exception as e:
-                st.error(f"Chatbot error: {str(e)}")
-                st.info("Make sure your ANTHROPIC_API_KEY is set correctly in your .env file and Streamlit secrets.")
-
-    # Clear chat button
-    if len(st.session_state.chat_history) > 0:
-        if st.button("Clear conversation"):
-            st.session_state.chat_history = []
-            st.rerun()
-
-    # Disclaimer
-    st.markdown("""
-    <div style="background:rgba(255,68,68,0.05); border:1px solid rgba(255,68,68,0.2);
-                border-radius:8px; padding:10px; margin-top:20px;">
-        <p style="color:#888; font-size:12px; margin:0;">
-            This chatbot uses live market data from your dashboard for educational analysis only.
-            Not financial advice. Not SEBI registered. Always consult a certified financial advisor.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
 
 elif page == "ℹ️ About":
     st.markdown("## About Market Pulse India")
