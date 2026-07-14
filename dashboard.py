@@ -4,13 +4,12 @@ import plotly.express as px
 
 @st.cache_data(ttl=3600)
 def load_data():
-    import os
+    
     import yfinance as yf
     from fredapi import Fred
-    from dotenv import load_dotenv
     
-    load_dotenv()
-    fred = Fred(api_key=os.getenv("FRED_API_KEY"))
+    
+    fred = Fred(api_key=st.secrets["FRED_API_KEY"])
     
     # Fetch fresh data directly
     nifty = yf.download("^NSEI", period="1y")["Close"]
